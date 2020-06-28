@@ -4,6 +4,16 @@ import os
 import csv
 import threading
 import time
+import logging
+
+Program_Version = "0.00.001"
+Program_Status = "Beta" 
+A = [1,2,3,4,5]
+
+# enable logging for all functions.
+logging.basicConfig(filename='debug.log',format='%(asctime)s | %(levelname)s | %(message)s',level=logging.DEBUG)
+# add the version info to the log.
+logging.debug('FileMan vesion %s %s',Program_Version, Program_Status)
 
 #All the file/folder actions are implemented in this class.
 class ActionManager:
@@ -12,6 +22,7 @@ class ActionManager:
     # This will initialize all the status maintainig variables and
     # will start the file/folder read thread.   
     def __init__(self, ActionSourceFoler,ActionDestinationFolder, RowID):
+        logging.debug("Action Manager Init called") #------debug message
         self.ActionDestinationFolder = ActionDestinationFolder #--Save the Destination folder for this action round
         self.ActionSourceFoler = ActionSourceFoler #--------------Save the source folder for this action round
         self.FlagReadNextSubFolder = False #----This is a local implementation of a lock. Set to False to hold the thread.
@@ -20,42 +31,47 @@ class ActionManager:
         self.FlagSubFolderTraverseThreadExit = False #----Indicator for the existance of the thread.
         self.SubFolderReadThread = threading.Thread(target = self.SubFolderTraverseThread, args = (RowID, ))
         self.SubFolderReadThread.start() #----------------Start the thread
+        logging.debug("Action Manager starting the SubFolderReadThread..") #------debug message
 
     # Distructor function
     # this will stop the file read thread
     def __del__(self):
-        print("Action Manager Distruct called")
+        logging.debug("Action Manager Distruct called") #------debug message
         self.KeepThreadAlive = False #Need to stop the thred
         self.FlagReadNextSubFolder = True #--Release the lock so that the thread can run.
         self.SubFolderReadThread.join() #wait for the thread to exit
-        print("Action Manager Distructed...")
+        logging.debug("Action Manager Distructed...") #--------debug message
 
     # This thread goes through each sub folder and will update 
     # 'NextSubFolderPath' variable with the folder name.
     # This thread creates 'NextSubFolderPath' so this variable can not be 
     # accessed before this thread goes through one round.
+    # If you set the "FlagReadNextSubFolder" to "True", this thread will run once and
+    # will update the 'NextSubFolderPath' and will set 'FlagNextSubFolderReady' flag.
+    # Make sure you set the "FlagNextSubFolderReady' to false before this setp for tracking.
+    # The arg is not used now, and we just pass the row number of the active action rule for debugging needs.
     def SubFolderTraverseThread(self,arg):
-        print("SubFolderTraverseThread started with", arg)
+        logging.debug("SubFolderTraverseThread started with %s", arg) #---------------debug message
         while(self.FlagReadNextSubFolder == False): #--Wait for the lock to release
             time.sleep(0.01)
         # we come here as the FlagReadNextSubFolder is True. 
         self.FlagReadNextSubFolder = False #reset the Flag to prevent re-run
-        print("SubFolderTraverseThread continue...")
+        logging.debug("SubFolderTraverseThread continue...") #------------------------debug message
         if(self.KeepThreadAlive == False): #---check for exit signal.
-            print("#10001 - SubFolderTraverseThread - Parent is dead")
+            logging.debug("#10001 - SubFolderTraverseThread - Parent is dead") #------debug message
             self.FlagSubFolderTraverseThreadExit = True
-            print("#10002 - exit From SubFolderTraverseThread")   #--Exit from thread.
-            return()
+            logging.debug("#10002 - exit From SubFolderTraverseThread") #-------------debug message
+            return() #----Exit from thread.
 
         for root in os.walk(self.ActionSourceFoler, topdown=False):
-            print (root[0])
+            logging.debug (root[0]) #-------------------------------------------------debug message
             if (root[0] == self.ActionSourceFoler):
-                print ("Root folder detected")
+                logging.debug ("Root folder detected") #------------------------------debug message
                 break
             x = root[0].split("\\") #get the last sub folder
-            print(x[1])
+            logging.debug(x[1]) # ---------------------------------------------------debug message
             self.NextSubFolderPath = os.path.join(self.ActionDestinationFolder,x[1]) #create the full path for the destination folder
-            print("SubFolderTraverseThread",self.NextSubFolderPath) #print new folder path
+            logging.info("SubFolderTraverseThread %s",self.NextSubFolderPath) #-----INFO: print new folder path
             self.FlagNextSubFolderReady = True #-----Indicate that the folder name is ready.
             while(self.FlagReadNextSubFolder == False): #--Wait for the next lock release.
                 time.sleep(0.01)
@@ -63,73 +79,78 @@ class ActionManager:
             self.FlagReadNextSubFolder = False #reset the Flag to prevent re-run
             
             if(self.KeepThreadAlive == False): #---check for exit signal.
-                print("SubFolderTraverseThread - Parent is dead")
+                logging.debug("#10003 SubFolderTraverseThread - Parent is dead") # debug message
                 break
         if (self.KeepThreadAlive == True):
-            print("SubFolderTraverseThread - No more Folders to report..!")
+            logging.debug("SubFolderTraverseThread - No more Folders to report..!")
         self.FlagSubFolderTraverseThreadExit = True
-        print("exit From SubFolderTraverseThread")   #--Exit from thread.
+        logging.debug("exit From SubFolderTraverseThread")   #--Exit from thread.
 
     # This function selects the next sub folder
     # NextSubFolderPath will point to the Destination folder
     def SelectNextSubFilder(self):
-        print("Select Next SubFilder- Let the thread run once")
+        logging.debug("Select Next SubFilder- Let the thread run once")
         self.FlagReadNextSubFolder = True #--Release the lock for the read thread to run
         while(self.FlagNextSubFolderReady == False): #Wait for the Folder name
             time.sleep(0.01)
             if(self.FlagSubFolderTraverseThreadExit == True):
-                print("SubFolderTraverseThread Terminated.")            
+                logging.warning("SubFolderTraverseThread Terminated.")#---------debug warning.            
                 return(1)
         # we come here as the FlagNextSubFolderReady is True. 
         self.FlagNextSubFolderReady = False #reset the Flag
-        print("SelectNextSubFilder -",self.NextSubFolderPath) #Print the folder name we got
+        logging.info("SelectNextSubFilder - %s",self.NextSubFolderPath) #-------Report the folder name we got
         return(0)
 
     # This function will get the next sub folder name and create an empty folder 
     # in the destination folder path
     def MakeNextSubFolder(self):
+        logging.info("MakeNextSubFolder - %s",self.NextSubFolderPath) #--------Debug message
+        print("Creating ", self.NextSubFolderPath)#----Print folder name info to the console
         try:
             os.mkdir(self.NextSubFolderPath)
         except OSError:
-            print ("Creation of the directory %s failed" % self.NextSubFolderPath)
+            logging.critical("Creation of the directory %s failed", self.NextSubFolderPath) #---Error message
             return(1)
         else:
-            print ("Successfully created the directory %s " % self.NextSubFolderPath)
+            logging.info("Successfully created the directory %s ", self.NextSubFolderPath) #----debug message
             return(0)
 
     # This function makes a folder by 'FolderName'
     # in the destination folder
+    # This function is not fully tested yet
     def MakeFolderofName(self,FolderName):
-        #debug print("copy folder", FolderName)
+        logging.debug("MakeFolderofName - %s",FolderName) #--------------------------Debug message
         FolderPath = os.path.join(self.ActionDestinationFolder,FolderName)
-        #debug print(FolderPath)
+        logging.info(FolderPath)
+        print("Creating ",FolderPath)#----Print folder name info to the console
         try:
             os.mkdir(FolderPath)
         except OSError:
-            print ("Creation of the directory %s failed" % FolderPath)
+            logging.critical("Creation of the directory %s failed", FolderPath) #----Error message
             return(1)
         else:
-            print ("Successfully created the directory %s " % FolderPath)
+            logging.info("Successfully created the directory %s ", FolderPath) #-----debug message
             return(0)
 
     # This function makes copies of all folders 
     # in the destination folder. They all will be empty.
+    # This function is not fully tested yet.
     def MakeAllFolders(self):
         #debug print("copy All folder")
         for root in os.walk(self.ActionSourceFoler, topdown=False):
-            #debug print (root[0])
+            logging.debug(root[0]) #-------------------------------------------------debug message
             x = root[0].split("\\") #get the last sub folder
-            #debug print(x[1])
+            logging.debug(x[1])
             FolderPath = os.path.join(self.ActionDestinationFolder,x[1]) #create the full path for the destination folder
-            #debug print(FolderPath) #print new folder path
+            logging.debug(FolderPath)  #---------------------------------------------debug message
             try:
                 os.mkdir(FolderPath)
             except OSError:
-                print ("Creation of the directory %s failed" % FolderPath)
+                logging.critical("Creation of the directory %s failed", FolderPath) #----Error message
                 return(1)
             else:
-                print ("Successfully created the directory %s " % FolderPath)
-        return(0)
+                logging.info("Successfully created the directory %s ", FolderPath) #-----debug message
+                return(0)
     
     # Add other actions here.
     # <> #
@@ -142,13 +163,14 @@ class AcitonListManager:
 
     #init will read the full file and record the file name and the max row count.
     def __init__(self, ImportFileName):
+        logging.debug("AcitonListManager init called")
         self.CSVFileName = ImportFileName
         with open(ImportFileName) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             for row in csv_reader:
                 #debug print(', '.join(row))
                 self.MaxRow += 1
-            print("Total Rows", self.MaxRow)
+            logging.debug("Total Rows %d", self.MaxRow) #--------------debug message
 
     #This will read a specific raw and save the value in interestingrows variable.
     #interestingrows will have row zero (title) and values of the selected row
@@ -156,7 +178,7 @@ class AcitonListManager:
         with open(self.CSVFileName) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             self.interestingrows=[row for idx, row in enumerate(csv_reader) if idx in (0,DirectRowNumber)]
-            #debug print(self.interestingrows)
+            logging.debug('Read Diract Row - %s',self.interestingrows) #----------------------debug message
 
     #This will read the Row saved in RowNumber and save the value in interestingrows variable.
     #interestingrows will have row zero (title) and values of the selected row 
@@ -164,23 +186,23 @@ class AcitonListManager:
         with open(self.CSVFileName) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             self.interestingrows=[row for idx, row in enumerate(csv_reader) if idx in (0,self.RowNumber)]
-            #debug print(self.interestingrows)
+            logging.debug('Read Row = %s',self.interestingrows) #----------------------debug message
 
     #This will incrememt the value saved in RowNumber
     def NextRow(self):
         self.RowNumber = self.RowNumber+1
-        #debug print(self.RowNumber)
+        logging.debug('NextRow = %d',self.RowNumber) #--------------------------------debug message
 
     #This will decrememt the value saved in RowNumber
     def PreviousRow(self):
         if(self.RowNumber > 0):
             self.RowNumber = self.RowNumber-1
-        #debug print(self.RowNumber)
+        logging.debug('PreviousRow = %d',self.RowNumber) #---------------------------debug message
 
     #This will Set the value saved in RowNumber
     def SetRow(self,DirectRowNumber):
         self.RowNumber = DirectRowNumber
-        #debug print(self.RowNumber)
+        logging.debug('Set Raw = %d',self.RowNumber) #-------------------------------debug message
 
 
 def main():
@@ -196,15 +218,17 @@ def main():
     #Debug print("Script folder -",ScriptDir)
     if (ScriptDir == ""): #if you run this from the same folder that the script exist, you get an empty string in python 3.7.2
         ScriptDir = os.getcwd() # in that case we will use this function to get the absolute path
-    print("Script folder -",ScriptDir)
-    ImportCSVFileName = os.path.join(os.path.split(ScriptDir)[0], 'TEST','Import.csv')
-    print("Try to get action list from", ImportCSVFileName)
+    logging.info("Script folder - %s",ScriptDir)
+    ImportCSVFileName = os.path.join(os.path.split(ScriptDir)[0], 'TEST','Import.csv') #-----debug message
+    logging.info("Try to get action list from %s", ImportCSVFileName) #----------------------INFO
+    print("Script CSV file = ", ImportCSVFileName) #-----------------------------------------Print the CSV FILE NAME
     NextProcess = AcitonListManager(ImportCSVFileName) # construct the Action manager.
     # TO DO - Get the file name as an input parameter #
+    # TO DO - exit if the file does not exits.
 
     while(NextProcess.RowNumber < (NextProcess.MaxRow-1)):  # We use MaxRow-1 as the Row Zero is the title row and each
                                                             # cycle process two lines.
-        print(NextProcess.RowNumber, "<", NextProcess.MaxRow-1)
+        logging.debug('RowNumber = %d , MaxRow-1 = %d',NextProcess.RowNumber, NextProcess.MaxRow-1) #------------------------debug message
         i = 0 #save the iteration count
         j = 0 #save the posison of the Action list
         NextProcess.NextRow() #Next row. This moves to row 1
@@ -213,7 +237,7 @@ def main():
         PrimeryIndex = NextProcess.interestingrows[1][0] #index is in the first column
         SourseFolder = NextProcess.interestingrows[1][1] #Source folder is in the second column
         DestinationFolder = NextProcess.interestingrows[1][2] #Destination folder is in the thrid column
-        print("Source =", SourseFolder,"\nDestination =", DestinationFolder)
+        logging.debug('Source = %s Destination = %s', SourseFolder, DestinationFolder)
         for idx in NextProcess.interestingrows[0]: #-------------go through all the items in row
             #debug print(idx, i)
             if("Action" in idx ):# Look for Action in Title row.. if it's an action..
@@ -221,59 +245,59 @@ def main():
                 #debug print("Action -". Action[j]) # found one action.
                 j += 1
             i += 1
-        print("Action list =",Action) #print the action list
+        logging.debug("Action list = %s",Action) #print the action list
         DoAction = ActionManager(SourseFolder,DestinationFolder,PrimeryIndex) #construct the Action Manager
         time.sleep(0.05) #time for the thread to start.
         i = 0 # this is used to control the work flow
         while (i < 10):
             if (Action[i] == "NULL" ): #the empty actions will be null
-                print("Action list done.!")
+                logging.debug("Action list done.!") #------------------------debug message
                 DoAction.__del__() #distruct the Action manager.
                 time.sleep(0.5)# let the thread exit
                 break
             else:
-                print(Action[i])
+                logging.debug(Action[i]) #-----------------------------------debug message
                 if (Action[i] == "SELECT_NEXT_SUB_FOLDER_FROM_SRC"): #Select the next Sub Folder
                     if (DoAction.SelectNextSubFilder() == 1):
-                        print("#30001 - File Selection error or task complete") # To Do - Differenciate between Folder Error and Exit
+                        logging.debug("#30001 - File Selection error or task complete") # To Do - Differenciate between Folder Error and Exit
                         DoAction.__del__() #distruct the Action manager.
                         break
                 elif (Action[i] == "COPY_SUB_FOLDER_FROM_SRC_TO_DEST"): #Copy the selected Sub Folder to Destination
                     if (DoAction.MakeNextSubFolder() == 1):
-                        print("#30002 - Folder Creation Error - Exit..!")
+                        logging.critical("#30002 - Folder Creation Error - Exit..!") # ---------------------Error message
                         DoAction.__del__() #distruct the Action manager.
                         return(1)
                 elif (Action[i] == "SET_FILE_NAME_START_WITH"): #Set the start pattern to file name to match
-                    print("SET_FILE_NAME_START_WITH")
+                    logging.debug("SET_FILE_NAME_START_WITH") #---------------------------------------------debug message
                 elif (Action[i] == "SET_FILE_TYPE"): #Set the file extension to match
-                    print("SET_FILE_TYPE")
+                    logging.debug("SET_FILE_TYPE") #--------------------------------------------------------debug message
                 elif (Action[i] == "COPY_ALL_FILES_OF_TYPE_TO_DEST_SUB_FOLDER"): #copy all files of type to sub folder
-                    print("COPY_ALL_FILES_OF_TYPE_TO_DEST_SUB_FOLDER")
+                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST_SUB_FOLDER") #-----------------------------debug message
                 elif (Action[i] == "COPY_ALL_FILES_OF_NAME_AND_TYPE_TO_DEST_SUB_FOLDER"): #Copy all files that match to sub foler
-                    print("COPY_ALL_FILES_OF_TYPE_TO_DEST")
+                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST") #---------------------------------------debug message
                 elif (Action[i] == "COPY_ALL_FILES_OF_TYPE_TO_DEST"): # Copy all files of type from sub folder to destination
-                    print("COPY_ALL_FILES_OF_TYPE_TO_DEST")
+                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST") #---------------------------------------debug message
                 elif (Action[i] == "SET_CSV_FILE_NAME"): #Set the file name for csv created at Destination folder
-                    print("SET_CSV_FILE_NAME")
+                    logging.debug("SET_CSV_FILE_NAME")#-----------------------------------------------------debug message
                 elif (Action[i] == "ADD_FOLDER_NAME_TO_CSV"): #Add the selected sub foler name to CSV
-                    print("ADD_FOLDER_NAME_TO_CSV")
+                    logging.debug("ADD_FOLDER_NAME_TO_CSV") #-----------------------------------------------debug message
                 elif ("CREATE_FOLDER_NAME_IN_DEST=>" in Action[i]): # Repease action. Jump to action ID (ACTION_1. ACTION_2)
-                    print ("Action =",Action[i])
+                    logging.debug("Action = %s",Action[i]) #------------------------------------------------debug message
                     DirectFileName = Action[i].split('>')
-                    print("File Name =",DirectFileName[1])
+                    logging.debug("File Name = %s",DirectFileName[1]) #-------------------------------------debug message
                     if(DoAction.MakeFolderofName(DirectFileName[1]) == 1):
-                        print("#30003 - Folder creation error - Exit..!")
+                        logging.critical("#30003 - Folder creation error - Exit..!") #----------------------Error Message
                         DoAction.__del__() #distruct the Action manager.
                         return(1)
-                elif ("ACTION" in Action[i]): # Repease action. Jump to action ID (ACTION_1. ACTION_2)
-                    print ("Action =",Action[i])
+                elif ("ACTION" in Action[i]): # Repeat action. Jump to action ID (ACTION_1. ACTION_2)
+                    logging.debug("Action = %s",Action[i]) #------------------------------------------------debug message
                     ActionID = Action[i].split('_')
-                    print("Action ID=",ActionID[1])
+                    logging.debug("Action ID= %s",ActionID[1]) #-----------------------------------------------debug message
                     i = int(ActionID[1])-1 #store the Action ID to i. Action ID is Zero based so we need to -1
-                    print(i)
+                    logging.debug(i) #----------------------------------------------------------------------debug message
                     continue #skip the increment of i
                 else:
-                    print("No Acition defined for", Action[i])
+                    logging.debug("No Acition defined for %s", Action[i]) #------------------------------------debug message
                 i += 1
 
 
