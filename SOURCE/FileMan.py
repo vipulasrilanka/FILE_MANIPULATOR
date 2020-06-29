@@ -8,7 +8,6 @@ import logging
 
 Program_Version = "0.00.001"
 Program_Status = "Beta" 
-A = [1,2,3,4,5]
 
 # enable logging for all functions.
 logging.basicConfig(filename='debug.log',format='%(asctime)s | %(levelname)s | %(message)s',level=logging.DEBUG)
@@ -43,11 +42,11 @@ class ActionManager:
         logging.debug("Action Manager Distructed...") #--------debug message
 
     # This thread goes through each sub folder and will update 
-    # 'NextSubFolderPath' variable with the folder name.
-    # This thread creates 'NextSubFolderPath' so this variable can not be 
+    # 'NextDestSubFolderPath' variable with the folder name.
+    # This thread creates 'NextDestSubFolderPath' so this variable can not be 
     # accessed before this thread goes through one round.
     # If you set the "FlagReadNextSubFolder" to "True", this thread will run once and
-    # will update the 'NextSubFolderPath' and will set 'FlagNextSubFolderReady' flag.
+    # will update the 'NextDestSubFolderPath' and will set 'FlagNextSubFolderReady' flag.
     # Make sure you set the "FlagNextSubFolderReady' to false before this setp for tracking.
     # The arg is not used now, and we just pass the row number of the active action rule for debugging needs.
     def SubFolderTraverseThread(self,arg):
@@ -70,8 +69,9 @@ class ActionManager:
                 break
             x = root[0].split("\\") #get the last sub folder
             logging.debug(x[1]) # ---------------------------------------------------debug message
-            self.NextSubFolderPath = os.path.join(self.ActionDestinationFolder,x[1]) #create the full path for the destination folder
-            logging.info("SubFolderTraverseThread %s",self.NextSubFolderPath) #-----INFO: print new folder path
+            self.NextDestSubFolderPath = os.path.join(self.ActionDestinationFolder,x[1]) #create the full path for the destination sub folder
+            self.CurrentSourceSubFolderPath = os.path.join(self.ActionSourceFoler,x[1])  #create the full path for the Source sub folder
+            logging.info("Next Destination sub Folder = %s : Current Source Sub Folder = %s",self.NextDestSubFolderPath, self.CurrentSourceSubFolderPath) #-----INFO: print new folder path
             self.FlagNextSubFolderReady = True #-----Indicate that the folder name is ready.
             while(self.FlagReadNextSubFolder == False): #--Wait for the next lock release.
                 time.sleep(0.01)
@@ -87,7 +87,7 @@ class ActionManager:
         logging.debug("exit From SubFolderTraverseThread")   #--Exit from thread.
 
     # This function selects the next sub folder
-    # NextSubFolderPath will point to the Destination folder
+    # NextDestSubFolderPath will point to the Destination folder
     def SelectNextSubFilder(self):
         logging.debug("Select Next SubFilder- Let the thread run once")
         self.FlagReadNextSubFolder = True #--Release the lock for the read thread to run
@@ -98,21 +98,21 @@ class ActionManager:
                 return(1)
         # we come here as the FlagNextSubFolderReady is True. 
         self.FlagNextSubFolderReady = False #reset the Flag
-        logging.info("SelectNextSubFilder - %s",self.NextSubFolderPath) #-------Report the folder name we got
+        logging.info("SelectNextSubFilder - %s",self.NextDestSubFolderPath) #-------Report the folder name we got
         return(0)
 
     # This function will get the next sub folder name and create an empty folder 
     # in the destination folder path
     def MakeNextSubFolder(self):
-        logging.info("MakeNextSubFolder - %s",self.NextSubFolderPath) #--------Debug message
-        print("Creating ", self.NextSubFolderPath)#----Print folder name info to the console
+        logging.info("MakeNextSubFolder - %s",self.NextDestSubFolderPath) #--------Debug message
+        print("Creating ", self.NextDestSubFolderPath)#----Print folder name info to the console
         try:
-            os.mkdir(self.NextSubFolderPath)
+            os.mkdir(self.NextDestSubFolderPath)
         except OSError:
-            logging.critical("Creation of the directory %s failed", self.NextSubFolderPath) #---Error message
+            logging.critical("Creation of the directory %s failed", self.NextDestSubFolderPath) #---Error message
             return(1)
         else:
-            logging.info("Successfully created the directory %s ", self.NextSubFolderPath) #----debug message
+            logging.info("Successfully created the directory %s ", self.NextDestSubFolderPath) #----debug message
             return(0)
 
     # This function makes a folder by 'FolderName'
@@ -152,6 +152,32 @@ class ActionManager:
                 logging.info("Successfully created the directory %s ", FolderPath) #-----debug message
                 return(0)
     
+    def SetCustomFileName (self, FileName, MatchType):
+        if(MatchType == "FULL_NAME"):
+            logging.debug("MatchType = FULL_NAME")
+            return(0)
+        elif(MatchType == "FILE_EXT"):
+            logging.debug("MatchType = FILE_EXT")
+            return(0)
+        elif (MatchType == "START_WITH"):
+            logging.debug("MatchType = START_WITH")
+            return(0)
+        elif (MatchType == "CONTAINS"):
+            logging.debug("MatchType = CONTAINS")
+            return(0)
+        else:
+            logging.critical("MatchType = UNKNOWN")
+            return(1)
+
+    def CopyCustomFile (self, d_action):
+        logging.debug(d_action)
+        logging.debug(self.ActionDestinationFolder)
+        logging.debug(self.ActionSourceFoler)
+        logging.debug(self.NextDestSubFolderPath)
+        logging.debug(self.CurrentSourceSubFolderPath)
+        return(0)
+
+
     # Add other actions here.
     # <> #
 
@@ -249,6 +275,7 @@ def main():
         DoAction = ActionManager(SourseFolder,DestinationFolder,PrimeryIndex) #construct the Action Manager
         time.sleep(0.05) #time for the thread to start.
         i = 0 # this is used to control the work flow
+        # Below loop handles "Actions" loop. 
         while (i < 10):
             if (Action[i] == "NULL" ): #the empty actions will be null
                 logging.debug("Action list done.!") #------------------------debug message
@@ -267,28 +294,69 @@ def main():
                         logging.critical("#30002 - Folder Creation Error - Exit..!") # ---------------------Error message
                         DoAction.__del__() #distruct the Action manager.
                         return(1)
-                elif (Action[i] == "SET_FILE_NAME_START_WITH"): #Set the start pattern to file name to match
-                    logging.debug("SET_FILE_NAME_START_WITH") #---------------------------------------------debug message
-                elif (Action[i] == "SET_FILE_TYPE"): #Set the file extension to match
-                    logging.debug("SET_FILE_TYPE") #--------------------------------------------------------debug message
-                elif (Action[i] == "COPY_ALL_FILES_OF_TYPE_TO_DEST_SUB_FOLDER"): #copy all files of type to sub folder
-                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST_SUB_FOLDER") #-----------------------------debug message
-                elif (Action[i] == "COPY_ALL_FILES_OF_NAME_AND_TYPE_TO_DEST_SUB_FOLDER"): #Copy all files that match to sub foler
-                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST") #---------------------------------------debug message
-                elif (Action[i] == "COPY_ALL_FILES_OF_TYPE_TO_DEST"): # Copy all files of type from sub folder to destination
-                    logging.debug("COPY_ALL_FILES_OF_TYPE_TO_DEST") #---------------------------------------debug message
-                elif (Action[i] == "SET_CSV_FILE_NAME"): #Set the file name for csv created at Destination folder
-                    logging.debug("SET_CSV_FILE_NAME")#-----------------------------------------------------debug message
+                elif ("SET_FILE_NAME_START_WITH" in Action[i] ): #Set the start pattern to file name to match
+                    logging.debug(Action[i]) #---------------------------------------------debug message
+                    DirectFileName = Action[i].split('>') #----------------Seperate out the Folder Name. 
+                    logging.debug("File Name = %s",DirectFileName[1]) #-----------------------------------debug message
+                    if(DoAction.SetCustomFileName(DirectFileName[1],"START_WITH") == 1):
+                        logging.critical("#40001 - This file does not exist in Source") #----------------------Error Message
+                        # We just set the File Name, so we do not exit here. 
+
+                elif ("SET_FILE_TYPE" in Action[i]): #Set the file extension to match
+                    logging.debug(Action[i]) #--------------------------------------------------------debug message
+                    DirectFileName = Action[i].split('>') #----------------Seperate out the Folder Name. 
+                    logging.debug("File Name = %s",DirectFileName[1]) #-----------------------------------debug message
+                    if(DoAction.SetCustomFileName(DirectFileName[1],"FILE_EXT") == 1):
+                        logging.critical("#40002 - This file does not exist in Source") #----------------------Error Message
+                        # We just set the File Name, so we do not exit here. 
+
+                elif ("SET_FULL_FILE_NAME" in Action[i]): #Set the Full File Name to match
+                    logging.debug(Action[i]) #--------------------------------------------------------debug message
+                    DirectFileName = Action[i].split('>') #----------------Seperate out the Folder Name. 
+                    logging.debug("File Name = %s",DirectFileName[1]) #-----------------------------------debug message
+                    if(DoAction.SetCustomFileName(DirectFileName[1],"FULL_NAME") == 1):
+                        logging.critical("#40003 - This file does not exist in Source") #----------------------Error Message
+                        # We just set the File Name, so we do not exit here. 
+
+                elif ("SET__FILE_NAME_CONTAINING" in Action[i]): #Set the part of File Name to Match
+                    logging.debug(Action[i]) #--------------------------------------------------------debug message
+                    DirectFileName = Action[i].split('>') #----------------Seperate out the Folder Name. 
+                    logging.debug("File Name = %s",DirectFileName[1]) #-----------------------------------debug message
+                    if(DoAction.SetCustomFileName(DirectFileName[1],"CONTAINS") == 1):
+                        logging.critical("#40004 - This file does not exist in Source") #----------------------Error Message
+                        # We just set the File Name, so we do not exit here. 
+
+                elif (Action[i] == "COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_SUB_FOLDER"): # Copy all matching files from Source 
+                                                                                                      # sub folderto Descination sub folder
+                    logging.debug("COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_SUB_FOLDER") #-----------------------------debug message
+                    DoAction.CopyCustomFile("COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_SUB_FOLDER")
+
+                elif (Action[i] == "COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_FOLDER"):  # Copy all matching files from Source
+                                                                                                   # sub folderto Descination folder
+                    logging.debug("COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_FOLDER") #-----------------------------debug message
+                    DoAction.CopyCustomFile("COPY_ALL_MATCHING_FILES_FROM_SRC_SUB_FOLDER_TO_DEST_FOLDER")
+
+                elif (Action[i] == "COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST_SUB_FOLDER"): # Copy all matching files from Source folder
+                                                                                                  # to destination sub folder
+                    logging.debug("COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST_SUB_FOLDER") #---------------------------------------debug message
+                    DoAction.CopyCustomFile("COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST_SUB_FOLDER")
+
+                elif (Action[i] == "COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST"): # Copy all matching files from Source to Destination folder
+                    logging.debug("COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST") #---------------------------------------debug message
+                    DoAction.CopyCustomFile("COPY_ALL_MATCHING_FILES_FROM_SRC_FOLDER_TO_DEST")
+
+                elif (Action[i] == "SET_OUT_CSV_FILE_NAME"): #Set the file name for csv created at Destination folder
+                    logging.debug("SET_OUT_CSV_FILE_NAME")#-----------------------------------------------------debug message
                 elif (Action[i] == "ADD_FOLDER_NAME_TO_CSV"): #Add the selected sub foler name to CSV
                     logging.debug("ADD_FOLDER_NAME_TO_CSV") #-----------------------------------------------debug message
                 elif ("CREATE_FOLDER_NAME_IN_DEST=>" in Action[i]): # Repease action. Jump to action ID (ACTION_1. ACTION_2)
                     logging.debug("Action = %s",Action[i]) #------------------------------------------------debug message
-                    DirectFileName = Action[i].split('>')
-                    logging.debug("File Name = %s",DirectFileName[1]) #-------------------------------------debug message
-                    if(DoAction.MakeFolderofName(DirectFileName[1]) == 1):
+                    DirectFolderName = Action[i].split('>') #------Seperate out the Folder Name. 
+                    logging.debug("File Name = %s",DirectFolderName[1]) #-----------------------------------debug message
+                    if(DoAction.MakeFolderofName(DirectFolderName[1]) == 1):
                         logging.critical("#30003 - Folder creation error - Exit..!") #----------------------Error Message
-                        DoAction.__del__() #distruct the Action manager.
-                        return(1)
+                        DoAction.__del__() #----------------------------------------------------------------distruct the Action manager.
+                        return(1) #-------------------------------------------------------------------------Exit from Program
                 elif ("ACTION" in Action[i]): # Repeat action. Jump to action ID (ACTION_1. ACTION_2)
                     logging.debug("Action = %s",Action[i]) #------------------------------------------------debug message
                     ActionID = Action[i].split('_')
